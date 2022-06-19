@@ -9,6 +9,8 @@ import org.hibernate.annotations.OnDeleteAction;
 
 import javax.persistence.*;
 import javax.validation.constraints.NotNull;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.UUID;
 
@@ -31,7 +33,7 @@ public class ShopUnitHistoryModel {
     @NotNull
     private ShopUnitType type;
 
-    private Date date;
+    private LocalDateTime date;
 
     private UUID parentId;
 }

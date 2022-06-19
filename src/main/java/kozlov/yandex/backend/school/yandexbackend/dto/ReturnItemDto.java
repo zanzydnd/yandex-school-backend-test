@@ -1,5 +1,6 @@
 package kozlov.yandex.backend.school.yandexbackend.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import kozlov.yandex.backend.school.yandexbackend.enums.ShopUnitType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,6 +9,8 @@ import lombok.NoArgsConstructor;
 
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.UUID;
 
@@ -25,6 +28,7 @@ public class ReturnItemDto {
 
     @Enumerated(EnumType.STRING)
     private ShopUnitType type;
-    private Date date;
+    @JsonFormat(shape = JsonFormat.Shape.STRING,pattern="yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+    private LocalDateTime date;
 
 }

@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +19,7 @@ import java.util.UUID;
 public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<ShopUnitModel>, JpaRepository<ShopUnitModel, UUID> {
 
     @Modifying
+    @Transactional
     @Query(value = "insert into shop_unit_history (date, name, price, type, origin_id,parent_id) (select shop_unit.date,\n" +
             "                                                                           shop_unit.name,\n" +
             "                                                                           shop_unit.price,\n" +
@@ -27,6 +30,11 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
             "                                                                    where shop_unit.id in :ids);", nativeQuery = true)
     int migrateToHistory(@Param("ids") List<UUID> ids);
 
+
+    @Modifying
+    @Transactional
+    @Query(value = "update shop_unit set date=:updateDate where id in :ids", nativeQuery = true)
+    int updateDateByIds(@Param("ids") List<UUID> ids, @Param("updateDate") LocalDateTime updateDate);
 
     @Query(value = "WITH RECURSIVE unit_tree as (\n" +
             "    SELECT s1.id,\n" +
@@ -77,7 +85,29 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
             "ORDER BY level;", nativeQuery = true)
     List<Map<String, Object>> getAllWithChildrenAndAveragePrice(@Param("headId") UUID id);
 
+    @Query(
+            nativeQuery = true,
+            value = "with RECURSIVE name_tree as\n" +
+                    "                   (\n" +
+                    "                       SELECT id, parent_id\n" +
+                    "                       FROM shop_unit\n" +
+                    "                       WHERE id IN (\n" +
+                    "                           SELECT parent_id\n" +
+                    "                           FROM shop_unit\n" +
+                    "                           WHERE id in :ids)\n" +
+                    "\n" +
+                    "                       union all\n" +
+                    "\n" +
+                    "                       select c.id, c.parent_id\n" +
+                    "                       from shop_unit c\n" +
+                    "                                join name_tree p on C.id = P.parent_id\n" +
+                    "                   )\n" +
+                    "select distinct(cast(id as varchar))\n" +
+                    "from name_tree where id not in :ids ;"
+    )
+    List<UUID> getAllParents(@Param("ids") List<UUID> ids);
+
     @Query(value = "select * from shop_unit as shp where shp.date <= :before and shp.date>= :after and shp.type = 'OFFER'", nativeQuery = true)
-    List<ShopUnitModel> findAllUnitsByDateBetween(@Param("after") Date after, @Param("before") Date before);
+    List<ShopUnitModel> findAllUnitsByDateBetween(@Param("after") LocalDateTime after, @Param("before") LocalDateTime before);
 
 }

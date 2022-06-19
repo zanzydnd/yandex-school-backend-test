@@ -10,10 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class BeanUtils extends org.springframework.beans.BeanUtils{
+public class BeanUtils extends org.springframework.beans.BeanUtils {
 
     /**
      * List <Map <String, Object >> преобразуется в List <T>
+     *
      * @param mapList
      * @param clazz
      * @param <T>
@@ -22,6 +23,7 @@ public class BeanUtils extends org.springframework.beans.BeanUtils{
      * @throws InstantiationException
      */
     public static <T> List<T> toList(List<Map<String, Object>> mapList, Class<T> clazz) throws IllegalAccessException, InstantiationException {
+
         if (mapList == null || clazz == null) {
             return null;
         }
@@ -36,24 +38,25 @@ public class BeanUtils extends org.springframework.beans.BeanUtils{
 
     /**
      * Копировать атрибуты к объектам с карты
-     * @author bazhandao
-     * @date 2018-11-10
+     *
      * @param map
      * @param target
+     * @date 2018-11-10
      */
-    public static void copyProperties(Map<String,Object> map, Object target) {
-        if(map == null || target == null || map.isEmpty()){
+    public static void copyProperties(Map<String, Object> map, Object target) {
+        if (map == null || target == null || map.isEmpty()) {
             return;
         }
         Class<?> actualEditable = target.getClass();
         PropertyDescriptor[] targetPds = getPropertyDescriptors(actualEditable);
         for (PropertyDescriptor targetPd : targetPds) {
-            if(targetPd.getWriteMethod() == null) {
+            if (targetPd.getWriteMethod() == null) {
                 continue;
             }
             try {
                 String key = targetPd.getName();
                 Object value = map.get(key);
+
                 setValue(target, targetPd, value);
             } catch (Exception ex) {
                 throw new FatalBeanException("Could not copy properties from source to target", ex);
@@ -63,6 +66,7 @@ public class BeanUtils extends org.springframework.beans.BeanUtils{
 
     /**
      * Установите значение для целевого компонента
+     *
      * @param target
      * @param targetPd
      * @param value

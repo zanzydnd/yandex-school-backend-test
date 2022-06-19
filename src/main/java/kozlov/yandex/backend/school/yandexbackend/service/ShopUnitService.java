@@ -16,6 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -36,7 +41,6 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     private ModelMapper modelMapper;
 
     @Override
-    @Transactional
     //родителем товара или категории может быть только категория
     // тут можно будет собрать все parentId и общим запросом посмотреть по длине результата есть ли среди parentId товар , а не категория.
     public Boolean importShopUnit(ImportShopUnitDto importShopUnitDto) {
@@ -50,6 +54,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
 
         importShopUnitDto.getItems()
                 .forEach(dto -> {
+
                     var model = map.get(dto.getId());
                     if (Objects.nonNull(dto.getParentId())) {
                         var parent = map.get(dto.getParentId());
@@ -58,7 +63,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                                 throw new BusinessLogicException("some text");
                             }
                             model.setParent(parent);
-
+                            System.out.println(model.getDate());
                             if (!result.contains(parent)) {
                                 result.add(parent);
                             }
@@ -74,14 +79,24 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                     }
                 });
 
-        shopUnitRepository.migrateToHistory(new ArrayList<>(map.keySet()));
 
-        shopUnitRepository.saveAll(result);
+        shopUnitRepository.migrateToHistory(new ArrayList<>(map.keySet()));
+        shopUnitRepository.saveAllAndFlush(result);
+
+
+
+        var parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(map.keySet()));
+
+
+
+        shopUnitRepository.migrateToHistory(parentsUUIDS);
+
+        shopUnitRepository.updateDateByIds(parentsUUIDS, importShopUnitDto.getUpdateDate());
 
         return true;
     }
 
-    private ShopUnitModel mapToShopUnitModel(ShopUnitDto shopUnitDto, Date updateDate) {
+    private ShopUnitModel mapToShopUnitModel(ShopUnitDto shopUnitDto, LocalDateTime updateDate) {
         var model = modelMapper.map(shopUnitDto, ShopUnitModel.class);
         model.setDate(updateDate);
         return model;
@@ -92,7 +107,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         try {
             shopUnitRepository.deleteById(id);
         } catch (EmptyResultDataAccessException e) {
-            throw new NotFoundException();
+            throw new NotFoundException("Not found");
         }
         return true;
     }
@@ -100,7 +115,6 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     @Override
     public ResponseNodeShopUnitDto getShopUnitModelWithChildren(UUID id) throws IllegalAccessException, InstantiationException {
         var map = shopUnitRepository.getAllWithChildrenAndAveragePrice(id);
-        //var dto = modelMapper.map(model, ResponseSalesShopUnitDto.class);
         var models = BeanUtils.toList(map, RecursiveShopUnitDto.class);
 
         return mapToOneObject(models);
@@ -109,11 +123,15 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     public ResponseNodeShopUnitDto mapToOneObject(List<RecursiveShopUnitDto> list) {
         Map<UUID, ResponseNodeShopUnitDto> map = new HashMap<>();
         ResponseNodeShopUnitDto result = new ResponseNodeShopUnitDto();
-        System.out.println(list);
+        if (list.size() == 0) {
+            throw new NotFoundException("Not found");
+        }
         list.forEach(dto -> {
+            System.out.println(dto.getLevel());
             if (dto.getLevel().equals(0)) {
                 result.setId(UUID.fromString(dto.getId()));
-                result.setDate(dto.getDate());
+                result.setDate(dto.getDate().toInstant()
+                        .atZone(ZoneId.systemDefault()).toLocalDateTime());
                 result.setPrice(dto.getPrice().longValue());
                 if (dto.getParent_id() == null) {
                     result.setParentId(null);
@@ -123,11 +141,19 @@ public class ShopUnitService implements ShopUnitServiceInterface {
 
                 result.setName(dto.getName());
                 result.setType(ShopUnitType.valueOf(dto.getType()));
+                if (ShopUnitType.CATEGORY.equals(result.getType())) {
+                    result.setChildren(new ArrayList<>());
+                }
                 map.put(result.getId(), result);
+
+                System.out.println(result.getName());
+                System.out.println(result.getDate());
             } else {
                 var current_dto = new ResponseNodeShopUnitDto();
                 current_dto.setId(UUID.fromString(dto.getId()));
-                current_dto.setDate(dto.getDate());
+                current_dto.setDate(dto.getDate().toInstant()
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDateTime());
                 current_dto.setPrice(dto.getPrice().longValue());
                 if (dto.getParent_id() == null) {
                     current_dto.setParentId(null);
@@ -144,20 +170,22 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                     var parent = map.get(UUID.fromString(dto.getParent_id()));
                     parent.getChildren().add(current_dto);
                 }
+                System.out.println(current_dto.getName());
+                System.out.println(current_dto.getDate());
             }
         });
         return result;
     }
 
     @Override
-    public ReturnSalesDto getSales(Date date) {
-        var salesUnitsModel = shopUnitRepository.findAllUnitsByDateBetween(new Date(date.getTime() - 24 * 60 * 60 * 1000), date);
+    public ReturnSalesDto getSales(LocalDateTime date) {
+        var salesUnitsModel = shopUnitRepository.findAllUnitsByDateBetween(date.minusHours(24), date);
         List<UUID> notIds = new ArrayList<>();
         var salesUnitsDto = salesUnitsModel.stream().map(obj -> {
             notIds.add(obj.getId());
             return modelMapper.map(obj, ReturnItemDto.class);
         });
-        var salesHistoryUnitsModel = shopUnitHistoryRepository.findAllUnitsHistoryByDateBetween(new Date(date.getTime() - 24 * 60 * 60 * 1000), date, notIds);
+        var salesHistoryUnitsModel = shopUnitHistoryRepository.findAllUnitsHistoryByDateBetween(date.minusHours(24), date, notIds);
         var salesHistoryUnitsDto = salesHistoryUnitsModel.stream().map(
                 obj -> {
                     return modelMapper.map(obj, ReturnItemDto.class);

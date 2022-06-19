@@ -20,7 +20,7 @@ public class BaseTaskController {
     private ShopUnitService shopUnitService;
 
     @PostMapping("/imports")
-    public String importGoods(@RequestBody @Valid ImportShopUnitDto shopUnitDto) {
+    public ResponseEntity<?> importGoods(@RequestBody @Valid ImportShopUnitDto shopUnitDto) {
         /*
         uuid товара или категории является уникальным среди товаров и категорий -
         родителем товара или категории может быть только категория
@@ -38,14 +38,14 @@ public class BaseTaskController {
         Duration timeElapsed = Duration.between(start, end);
         System.out.println("All: " + shopUnitDto.getItems().size());
         System.out.println("Time taken: " + timeElapsed.toMillis() + " milliseconds");
-        return "true";
+        return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/delete/{id}")
-    public String deleteElement(@PathVariable(required = true) UUID id) {
+    public ResponseEntity<?> deleteElement(@PathVariable(required = true) UUID id) {
 
         shopUnitService.deleteShopUnit(id);
-        return "deleted " + id;
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/nodes/{id}")

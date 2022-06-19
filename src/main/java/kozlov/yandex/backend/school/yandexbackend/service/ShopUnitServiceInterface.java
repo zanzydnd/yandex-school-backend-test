@@ -6,6 +6,7 @@ import kozlov.yandex.backend.school.yandexbackend.dto.ReturnSalesDto;
 import kozlov.yandex.backend.school.yandexbackend.dto.ShopUnitDto;
 import kozlov.yandex.backend.school.yandexbackend.model.ShopUnitModel;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -18,7 +19,7 @@ public interface ShopUnitServiceInterface {
 
     ResponseNodeShopUnitDto getShopUnitModelWithChildren(UUID id) throws IllegalAccessException, InstantiationException;
 
-    ReturnSalesDto getSales(Date date);
+    ReturnSalesDto getSales(LocalDateTime date);
 
     ReturnSalesDto getStatistics(UUID id, Date dateStart, Date dateEnd);
 }
