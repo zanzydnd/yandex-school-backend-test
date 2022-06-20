@@ -7,6 +7,7 @@ import kozlov.yandex.backend.school.yandexbackend.model.ShopUnitHistoryModel;
 import kozlov.yandex.backend.school.yandexbackend.model.ShopUnitModel;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.PropertyMap;
+import org.modelmapper.convention.MatchingStrategies;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -21,8 +22,10 @@ public class GlobalConfig {
     @Bean
     public ModelMapper ModelMapper() {
         ModelMapper modelMapper = new ModelMapper();
+        modelMapper.getConfiguration().setMatchingStrategy(MatchingStrategies.STRICT);
         modelMapper.typeMap(ShopUnitHistoryModel.class, ReturnItemDto.class)
-                .addMapping(ShopUnitHistoryModel::getOriginId, ReturnItemDto::setId);
+                .addMapping(ShopUnitHistoryModel::getOriginId, ReturnItemDto::setId)
+                .addMapping(ShopUnitHistoryModel::getParentId, ReturnItemDto::setParentId);
         return modelMapper;
     }
 }

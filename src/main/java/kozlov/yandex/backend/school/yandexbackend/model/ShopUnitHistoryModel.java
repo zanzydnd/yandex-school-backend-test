@@ -25,7 +25,8 @@ public class ShopUnitHistoryModel {
     @NotNull
     private String name;
 
-    private String originId;
+    @Column(name = "origin_id")
+    private UUID originId;
 
     private Long price;
 
@@ -35,5 +36,6 @@ public class ShopUnitHistoryModel {
 
     private LocalDateTime date;
 
+    @Column(name = "parent_id")
     private UUID parentId;
 }

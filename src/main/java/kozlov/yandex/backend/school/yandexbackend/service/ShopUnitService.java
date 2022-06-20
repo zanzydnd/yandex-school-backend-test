@@ -54,8 +54,14 @@ public class ShopUnitService implements ShopUnitServiceInterface {
 
         importShopUnitDto.getItems()
                 .forEach(dto -> {
-
                     var model = map.get(dto.getId());
+                    if(ShopUnitType.OFFER.equals(dto.getType())){
+                        if(dto.getPrice() == null || dto.getPrice() < 0) throw new BusinessLogicException("Can't set price for category");
+                    }
+                    else {
+                        if(dto.getPrice() != null) throw  new BusinessLogicException("Can't set price for category");
+                    }
+
                     if (Objects.nonNull(dto.getParentId())) {
                         var parent = map.get(dto.getParentId());
                         if (Objects.nonNull(parent)) {
@@ -63,7 +69,6 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                                 throw new BusinessLogicException("some text");
                             }
                             model.setParent(parent);
-                            System.out.println(model.getDate());
                             if (!result.contains(parent)) {
                                 result.add(parent);
                             }
@@ -82,12 +87,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
 
         shopUnitRepository.migrateToHistory(new ArrayList<>(map.keySet()));
         shopUnitRepository.saveAllAndFlush(result);
-
-
-
         var parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(map.keySet()));
-
-
 
         shopUnitRepository.migrateToHistory(parentsUUIDS);
 
@@ -146,8 +146,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                 }
                 map.put(result.getId(), result);
 
-                System.out.println(result.getName());
-                System.out.println(result.getDate());
+
             } else {
                 var current_dto = new ResponseNodeShopUnitDto();
                 current_dto.setId(UUID.fromString(dto.getId()));
@@ -188,6 +187,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         var salesHistoryUnitsModel = shopUnitHistoryRepository.findAllUnitsHistoryByDateBetween(date.minusHours(24), date, notIds);
         var salesHistoryUnitsDto = salesHistoryUnitsModel.stream().map(
                 obj -> {
+                    System.out.println(obj);
                     return modelMapper.map(obj, ReturnItemDto.class);
                 }
         );

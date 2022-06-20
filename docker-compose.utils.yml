@@ -13,3 +13,7 @@ services:
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
+    volumes:
+      - utils_db_ya:/var/lib/postgresql/data
+volumes:
+  utils_db_ya:
