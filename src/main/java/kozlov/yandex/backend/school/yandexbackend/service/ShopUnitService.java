@@ -2,7 +2,6 @@ package kozlov.yandex.backend.school.yandexbackend.service;
 
 import kozlov.yandex.backend.school.yandexbackend.dto.*;
 import kozlov.yandex.backend.school.yandexbackend.enums.ShopUnitType;
-import kozlov.yandex.backend.school.yandexbackend.exception.BusinessLogicException;
 import kozlov.yandex.backend.school.yandexbackend.exception.NotFoundException;
 import kozlov.yandex.backend.school.yandexbackend.jpa.repository.ShopUnitHistoryRepositoryInterface;
 import kozlov.yandex.backend.school.yandexbackend.jpa.repository.ShopUnitRepositoryInterface;
@@ -12,17 +11,10 @@ import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
-import java.sql.Timestamp;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -40,54 +32,94 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     @Autowired
     private ModelMapper modelMapper;
 
+    public void putToStackOfModel(Map<UUID, ShopUnitModel> all, Map<UUID, List<ShopUnitModel>> childrenMap,
+                                  ShopUnitModel current, Stack<List<ShopUnitModel>> stack, List<ShopUnitModel> list) {
+
+        list.add(current);
+        if (childrenMap.containsKey(current.getId())) {
+            List<ShopUnitModel> forLowerLevel = new ArrayList<>();
+            //проходимся по детям
+            childrenMap.get(current.getId()).forEach(item -> {
+                putToStackOfModel(all, childrenMap, item, stack, forLowerLevel);
+            });
+            childrenMap.remove(current.getId());
+            stack.push(forLowerLevel);
+        }
+    }
+
     @Override
     //родителем товара или категории может быть только категория
     // тут можно будет собрать все parentId и общим запросом посмотреть по длине результата есть ли среди parentId товар , а не категория.
     public Boolean importShopUnit(ImportShopUnitDto importShopUnitDto) {
+        Map<UUID, ShopUnitModel> rootLevelMap = new HashMap<>();
+        Map<UUID, ShopUnitModel> all = new HashMap<>();
+        Map<UUID, List<ShopUnitModel>> childrenMap = new HashMap<>();
+        //Складываем все по map - чтобы потом пользоваться ими, мапим результаты
+        importShopUnitDto.getItems().forEach(item -> {
+            var model = mapToShopUnitModel(item, importShopUnitDto.getUpdateDate());
+            rootLevelMap.put(item.getId(), model);
+            all.put(item.getId(), model);
+        });
 
-        var map = importShopUnitDto.getItems()
-                .stream()
-                .map(dto -> mapToShopUnitModel(dto, importShopUnitDto.getUpdateDate()))
-                .collect(Collectors.toMap(ShopUnitModel::getId, Function.identity()));
-
-        var result = new ArrayList<ShopUnitModel>();
-
-        importShopUnitDto.getItems()
-                .forEach(dto -> {
-                    var model = map.get(dto.getId());
-                    if(ShopUnitType.OFFER.equals(dto.getType())){
-                        if(dto.getPrice() == null || dto.getPrice() < 0) throw new BusinessLogicException("Can't set price for category");
-                    }
-                    else {
-                        if(dto.getPrice() != null) throw  new BusinessLogicException("Can't set price for category");
-                    }
-
-                    if (Objects.nonNull(dto.getParentId())) {
-                        var parent = map.get(dto.getParentId());
-                        if (Objects.nonNull(parent)) {
-                            if (ShopUnitType.OFFER.equals(parent.getType())) {
-                                throw new BusinessLogicException("some text");
-                            }
-                            model.setParent(parent);
-                            if (!result.contains(parent)) {
-                                result.add(parent);
-                            }
-                        } else {
-                            model.setParent(ShopUnitModel.builder()
-                                    .id(dto.getParentId())
-                                    .build());
-                        }
-                    }
-
-                    if (!result.contains(model)) {
-                        result.add(model);
-                    }
-                });
+        /*
+           Здесь будет три мапы
+           rootLevelMap - в ней останутся только мапы , у которых нет родителей
+           childrenMap - здесь будем хранить детей
+           all - все мапы, чтобы доставать модели
+        */
+        importShopUnitDto.getItems().forEach(item -> {
+            if (item.getParentId() != null) {
+                if (childrenMap.containsKey(item.getParentId())) {
+                    childrenMap.get(item.getParentId()).add(all.get(item.getId()));
+                } else {
+                    childrenMap.put(item.getParentId(), new ArrayList<>(List.of(new ShopUnitModel[]{all.get(item.getId())})));
+                }
+                rootLevelMap.remove(item.getId());
+            }
+        });
 
 
-        shopUnitRepository.migrateToHistory(new ArrayList<>(map.keySet()));
-        shopUnitRepository.saveAllAndFlush(result);
-        var parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(map.keySet()));
+        Stack<List<ShopUnitModel>> stack = new Stack<>();
+        List<ShopUnitModel> rootLevel = new ArrayList<>();
+        rootLevelMap.keySet().forEach(id -> {
+
+            putToStackOfModel(all, childrenMap, all.get(id), stack, rootLevel);
+
+            //добавляем наш рут уровень
+            //System.out.println(rootLevel);
+            stack.push(rootLevel);
+
+        });
+
+        //проверяем не осталось ли пустых родитиелей ( если пришли только их дети в теле ,
+        // но самих родитиелей в теле запроса не было)
+        // если есть, то кладем их в стек , так как их родители должны быть в базе
+        List<ShopUnitModel> orphans = new ArrayList<>();
+
+        childrenMap.keySet().forEach(parent -> {
+            orphans.addAll(childrenMap.get(parent));
+        });
+        stack.push(orphans);
+
+        System.out.println(orphans);
+        shopUnitRepository.migrateToHistory(new ArrayList<>(all.keySet()));
+
+        while (!stack.empty()) {
+            List<ShopUnitModel> shopUnitModels = stack.pop();
+            for (ShopUnitModel model : shopUnitModels) {
+                if (all.containsKey(model.getParentId())) {
+                    model.setParent(all.get(model.getParentId()));
+                } else if (model.getParentId() != null) {
+                    model.setParent(
+                            ShopUnitModel.builder().id(model.getParentId()).build()
+                    );
+                }
+            }
+            shopUnitRepository.saveAll(shopUnitModels);
+        }
+
+        var parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(all.keySet()));
+
 
         shopUnitRepository.migrateToHistory(parentsUUIDS);
 

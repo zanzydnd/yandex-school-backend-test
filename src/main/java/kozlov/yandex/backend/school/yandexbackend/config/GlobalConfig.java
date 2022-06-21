@@ -26,6 +26,7 @@ public class GlobalConfig {
         modelMapper.typeMap(ShopUnitHistoryModel.class, ReturnItemDto.class)
                 .addMapping(ShopUnitHistoryModel::getOriginId, ReturnItemDto::setId)
                 .addMapping(ShopUnitHistoryModel::getParentId, ReturnItemDto::setParentId);
+
         return modelMapper;
     }
 }

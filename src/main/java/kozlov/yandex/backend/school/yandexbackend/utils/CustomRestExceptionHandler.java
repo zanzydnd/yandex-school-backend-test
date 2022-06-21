@@ -17,6 +17,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @ControllerAdvice
@@ -25,6 +26,7 @@ public class CustomRestExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<BodyError> handleException(NotFoundException e) {
         BodyError error = new BodyError("Item not found", 404);
+        System.out.println(Arrays.toString(e.getStackTrace()));
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 
@@ -33,6 +35,7 @@ public class CustomRestExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ResponseEntity<BodyError> handleException(Exception e) {
         BodyError error = new BodyError("Validation Failed", 400);
+        System.out.println(Arrays.toString(e.getStackTrace()));
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 

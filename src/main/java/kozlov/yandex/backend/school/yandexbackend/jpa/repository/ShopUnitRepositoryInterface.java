@@ -35,7 +35,7 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
     @Transactional
     @Query(value = "update shop_unit set date=:updateDate where id in :ids", nativeQuery = true)
     int updateDateByIds(@Param("ids") List<UUID> ids, @Param("updateDate") LocalDateTime updateDate);
-
+    
     @Query(value = "WITH RECURSIVE unit_tree as (\n" +
             "    SELECT s1.id,\n" +
             "           s1.name,\n" +

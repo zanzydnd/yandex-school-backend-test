@@ -41,7 +41,6 @@ public class BeanUtils extends org.springframework.beans.BeanUtils {
      *
      * @param map
      * @param target
-     * @date 2018-11-10
      */
     public static void copyProperties(Map<String, Object> map, Object target) {
         if (map == null || target == null || map.isEmpty()) {
