@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+// Служит для маппинга метода ShopUnitRepositoryInterface.getAllWithChildrenAndAveragePrice в dto
+
 public class BeanUtils extends org.springframework.beans.BeanUtils {
 
     /**
@@ -74,7 +76,7 @@ public class BeanUtils extends org.springframework.beans.BeanUtils {
      */
     private static void setValue(Object target, PropertyDescriptor targetPd, Object value) throws IllegalAccessException, InvocationTargetException, InvocationTargetException {
         // Здесь, чтобы определить, пусто ли следующее значение
-        if (value != null) {
+        if (value != null && target!=null)  {
             Method writeMethod = targetPd.getWriteMethod();
             if (!Modifier.isPublic(writeMethod.getDeclaringClass().getModifiers())) {
                 writeMethod.setAccessible(true);

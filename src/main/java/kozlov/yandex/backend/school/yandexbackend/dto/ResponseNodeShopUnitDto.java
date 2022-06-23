@@ -19,6 +19,7 @@ import java.util.UUID;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 public class ResponseNodeShopUnitDto {
     @NotNull
     private UUID id;

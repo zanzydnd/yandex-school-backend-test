@@ -20,6 +20,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @ComponentScan("kozlov.yandex.backend.school.yandexbackend.service")
 public class GlobalConfig {
     @Bean
+    // маппер из дто в модель и обратно
     public ModelMapper ModelMapper() {
         ModelMapper modelMapper = new ModelMapper();
         modelMapper.getConfiguration().setMatchingStrategy(MatchingStrategies.STRICT);

@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 
 @Data
 @AllArgsConstructor
+//Тело response для ошибочных запросов
 public class BodyError {
     private final String message;
     private final Integer code;

@@ -32,6 +32,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     @Autowired
     private ModelMapper modelMapper;
 
+    //данный метод расскладывает пришедшее тело в стек по иерархии , где последний положенный элемент окажется самым высоким в дереве
     public void putToStackOfModel(Map<UUID, ShopUnitModel> all, Map<UUID, List<ShopUnitModel>> childrenMap,
                                   ShopUnitModel current, Stack<List<ShopUnitModel>> stack, List<ShopUnitModel> list) {
 
@@ -48,12 +49,11 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     }
 
     @Override
-    //родителем товара или категории может быть только категория
-    // тут можно будет собрать все parentId и общим запросом посмотреть по длине результата есть ли среди parentId товар , а не категория.
     public Boolean importShopUnit(ImportShopUnitDto importShopUnitDto) {
         Map<UUID, ShopUnitModel> rootLevelMap = new HashMap<>();
         Map<UUID, ShopUnitModel> all = new HashMap<>();
         Map<UUID, List<ShopUnitModel>> childrenMap = new HashMap<>();
+
         //Складываем все по map - чтобы потом пользоваться ими, мапим результаты
         importShopUnitDto.getItems().forEach(item -> {
             var model = mapToShopUnitModel(item, importShopUnitDto.getUpdateDate());
@@ -101,10 +101,10 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         });
         stack.push(orphans);
 
-        System.out.println(orphans);
         shopUnitRepository.migrateToHistory(new ArrayList<>(all.keySet()));
 
         while (!stack.empty()) {
+            // мапим каждую отдельно , потому что hibernate испытывает трудности с этим  - не смог исправить
             List<ShopUnitModel> shopUnitModels = stack.pop();
             for (ShopUnitModel model : shopUnitModels) {
                 if (all.containsKey(model.getParentId())) {
@@ -118,6 +118,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
             shopUnitRepository.saveAll(shopUnitModels);
         }
 
+        //здесь мы получаем id сущностей , которые тоже нужно обновить , потому что они родители
         var parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(all.keySet()));
 
 
@@ -128,11 +129,13 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         return true;
     }
 
+    // данный метод мапит дто в сущность и проставляет дату
     private ShopUnitModel mapToShopUnitModel(ShopUnitDto shopUnitDto, LocalDateTime updateDate) {
         var model = modelMapper.map(shopUnitDto, ShopUnitModel.class);
         model.setDate(updateDate);
         return model;
     }
+
 
     @Override
     public Boolean deleteShopUnit(UUID id) {
@@ -144,6 +147,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         return true;
     }
 
+
     @Override
     public ResponseNodeShopUnitDto getShopUnitModelWithChildren(UUID id) throws IllegalAccessException, InstantiationException {
         var map = shopUnitRepository.getAllWithChildrenAndAveragePrice(id);
@@ -152,6 +156,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         return mapToOneObject(models);
     }
 
+    //здесь происходит маппинг пришедшего ответа от рекурсивного запроса в одну дто , которая удволетваряет спецификации
     public ResponseNodeShopUnitDto mapToOneObject(List<RecursiveShopUnitDto> list) {
         Map<UUID, ResponseNodeShopUnitDto> map = new HashMap<>();
         ResponseNodeShopUnitDto result = new ResponseNodeShopUnitDto();
@@ -164,7 +169,11 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                 result.setId(UUID.fromString(dto.getId()));
                 result.setDate(dto.getDate().toInstant()
                         .atZone(ZoneId.systemDefault()).toLocalDateTime());
-                result.setPrice(dto.getPrice().longValue());
+                if (dto.getPrice() == null) {
+                    result.setPrice(null);
+                } else {
+                    result.setPrice(dto.getPrice().longValue());
+                }
                 if (dto.getParent_id() == null) {
                     result.setParentId(null);
                 } else {
@@ -185,7 +194,11 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                 current_dto.setDate(dto.getDate().toInstant()
                         .atZone(ZoneId.systemDefault())
                         .toLocalDateTime());
-                current_dto.setPrice(dto.getPrice().longValue());
+                if (dto.getPrice() == null) {
+                    current_dto.setPrice(null);
+                } else {
+                    current_dto.setPrice(dto.getPrice().longValue());
+                }
                 if (dto.getParent_id() == null) {
                     current_dto.setParentId(null);
                 } else {
@@ -208,6 +221,8 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         return result;
     }
 
+
+    // возвращает скидки(самый последний обновленный элемент)
     @Override
     public ReturnSalesDto getSales(LocalDateTime date) {
         var salesUnitsModel = shopUnitRepository.findAllUnitsByDateBetween(date.minusHours(24), date);
@@ -229,6 +244,7 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         return returnSalesDto;
     }
 
+    // не смог придумать запрос
     @Override
     public ReturnSalesDto getStatistics(UUID id, Date dateStart, Date dateEnd) {
         return null;

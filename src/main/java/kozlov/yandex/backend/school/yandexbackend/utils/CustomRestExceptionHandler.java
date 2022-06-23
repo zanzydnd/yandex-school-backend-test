@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @ControllerAdvice
+// Класс отлавливает exception-ы и меняет в них тело и status-code
 public class CustomRestExceptionHandler {
 
     @ExceptionHandler(NotFoundException.class)

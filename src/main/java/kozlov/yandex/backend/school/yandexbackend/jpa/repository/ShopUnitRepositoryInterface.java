@@ -18,24 +18,80 @@ import java.util.UUID;
 
 public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<ShopUnitModel>, JpaRepository<ShopUnitModel, UUID> {
 
-    @Modifying
-    @Transactional
-    @Query(value = "insert into shop_unit_history (date, name, price, type, origin_id,parent_id) (select shop_unit.date,\n" +
-            "                                                                           shop_unit.name,\n" +
-            "                                                                           shop_unit.price,\n" +
-            "                                                                           shop_unit.type,\n" +
-            "                                                                           shop_unit.id, \n" +
-            "                                                                           shop_unit.parent_id \n" +
-            "                                                                    from shop_unit\n" +
-            "                                                                    where shop_unit.id in :ids);", nativeQuery = true)
-    int migrateToHistory(@Param("ids") List<UUID> ids);
+//    @Modifying
+//    @Transactional
+//    @Query(value = "insert into shop_unit_history (date, name, price, type, origin_id,parent_id) (select shop_unit.date,\n" +
+//            "                                                                           shop_unit.name,\n" +
+//            "                                                                           shop_unit.price,\n" +
+//            "                                                                           shop_unit.type,\n" +
+//            "                                                                           shop_unit.id, \n" +
+//            "                                                                           shop_unit.parent_id \n" +
+//            "                                                                    from shop_unit\n" +
+//            "                                                                    where shop_unit.id in :ids);", nativeQuery = true)
+//    int migrateToHistory(@Param("ids") List<UUID> ids);
 
+    @Transactional
+    @Modifying
+    @Query(
+            value = "insert into shop_unit_history (date, name, price, type, origin_id, parent_id)\n" +
+                    "\n" +
+                    "\n" +
+                    "    (select sp.date,\n" +
+                    "            sp.name,\n" +
+                    "            (\n" +
+                    "                (\n" +
+                    "                    WITH RECURSIVE unit_tree as (\n" +
+                    "                        SELECT s1.id,\n" +
+                    "                               s1.name,\n" +
+                    "                               s1.price,\n" +
+                    "                               s1.parent_id,\n" +
+                    "                               s1.type,\n" +
+                    "                               s1.date,\n" +
+                    "                               0                       as level,\n" +
+                    "                               array [s1.id] as path\n" +
+                    "                        FROM shop_unit s1\n" +
+                    "                        WHERE s1.id = sp.id\n" +
+                    "\n" +
+                    "                        UNION ALL\n" +
+                    "\n" +
+                    "                        SELECT s2.id,\n" +
+                    "                               s2.name,\n" +
+                    "                               s2.price,\n" +
+                    "                               s2.parent_id,\n" +
+                    "                               s2.type,\n" +
+                    "                               s2.date,\n" +
+                    "                               level + 1,\n" +
+                    "                               ut.path || s2.id as path --generate the path for every unit so that we can check if it is a child of another element\n" +
+                    "                        FROM shop_unit s2\n" +
+                    "                                 JOIN unit_tree ut ON ut.id = s2.parent_id\n" +
+                    "                    )\n" +
+                    "                    SELECT case when ut.type = 'CATEGORY' then ap.avg_price else ut.price end as price\n" +
+                    "                    FROM unit_tree ut\n" +
+                    "                             LEFT JOIN LATERAL (\n" +
+                    "                        SELECT avg(ut2.price) avg_price\n" +
+                    "                        FROM unit_tree ut2\n" +
+                    "                        WHERE ut.level < ut2.level\n" +
+                    "                          and ut.id = any (path)\n" +
+                    "                        GROUP BY ut.id\n" +
+                    "                        ) ap ON TRUE\n" +
+                    "                    where ut.level = 0\n" +
+                    "                )\n" +
+                    "            ) as price,\n" +
+                    "            sp.type,\n" +
+                    "            sp.id,\n" +
+                    "            sp.parent_id\n" +
+                    "     from shop_unit sp\n" +
+                    "     where id in :ids" +
+                    "    );",
+            nativeQuery = true
+    )
+    int migrateToHistory(@Param("ids") List<UUID> ids);
 
     @Modifying
     @Transactional
     @Query(value = "update shop_unit set date=:updateDate where id in :ids", nativeQuery = true)
     int updateDateByIds(@Param("ids") List<UUID> ids, @Param("updateDate") LocalDateTime updateDate);
-    
+
     @Query(value = "WITH RECURSIVE unit_tree as (\n" +
             "    SELECT s1.id,\n" +
             "           s1.name,\n" +
