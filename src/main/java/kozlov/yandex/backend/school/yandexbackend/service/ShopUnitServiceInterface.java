@@ -21,5 +21,5 @@ public interface ShopUnitServiceInterface {
 
     ReturnSalesDto getSales(LocalDateTime date);
 
-    ReturnSalesDto getStatistics(UUID id, Date dateStart, Date dateEnd);
+    ReturnSalesDto getStatistics(UUID id, LocalDateTime dateStart, LocalDateTime dateEnd);
 }

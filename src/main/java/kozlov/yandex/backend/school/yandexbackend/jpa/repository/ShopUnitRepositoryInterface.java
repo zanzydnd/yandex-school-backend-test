@@ -158,12 +158,59 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
                     "                       from shop_unit c\n" +
                     "                                join name_tree p on C.id = P.parent_id\n" +
                     "                   )\n" +
-                    "select distinct(cast(id as varchar))\n" +
+                    "select distinct(cast(id as varchar)) \n" +
                     "from name_tree where id not in :ids ;"
     )
     List<UUID> getAllParents(@Param("ids") List<UUID> ids);
 
     @Query(value = "select * from shop_unit as shp where shp.date <= :before and shp.date>= :after and shp.type = 'OFFER'", nativeQuery = true)
     List<ShopUnitModel> findAllUnitsByDateBetween(@Param("after") LocalDateTime after, @Param("before") LocalDateTime before);
+
+    @Query(
+            value = """
+                    WITH RECURSIVE unit_tree as (
+                        SELECT s1.id,
+                               s1.name,
+                               s1.price,
+                               s1.parent_id,
+                               s1.type,
+                               s1.date,
+                               0 as level,
+                               array [s1.id] as path
+                        FROM shop_unit s1
+                        WHERE s1.id = :id
+
+                        UNION ALL
+
+                        SELECT s2.id,
+                               s2.name,
+                               s2.price,
+                               s2.parent_id,
+                               s2.type,
+                               s2.date,
+                               level + 1,
+                               ut.path || s2.id as path 
+                        FROM shop_unit s2
+                                 JOIN unit_tree ut ON ut.id = s2.parent_id
+                    )
+
+                    SELECT cast(ut.id as varchar) as id ,
+                           ut.name as name,
+                           cast(ut.parent_id as varchar) as parent_id,
+                           ut.type as type ,
+                           case when ut.type = 'CATEGORY' then ap.avg_price else ut.price end as price,
+                           ut.date
+                    FROM unit_tree ut
+                             LEFT JOIN LATERAL (
+                        SELECT avg(ut2.price) avg_price
+                        FROM unit_tree ut2
+                        WHERE ut.level < ut2.level
+                          and ut.id = any (path)
+                        GROUP BY ut.id
+                        ) ap ON TRUE
+                    where ut.level = 0 and ut.date >= :after and ut.date < :before ;""",
+            nativeQuery = true
+    )
+    ShopUnitModel findAllUnitsByDateBetweenAndIdWithAvg(@Param("after") LocalDateTime after, @Param("before") LocalDateTime before, @Param("id") UUID id);
 
 }

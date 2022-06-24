@@ -30,8 +30,8 @@ public class SideTaskController {
     @GetMapping("/node/{id}/statistic")
     public ResponseEntity<?> getStats(@PathVariable(required = true) UUID id, @RequestParam(name = "dateStart", required = true)
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            Date dateStart, @RequestParam(name = "dateEnd", required = true) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-                                              Date dateEnd) {
+            LocalDateTime dateStart, @RequestParam(name = "dateEnd", required = true) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                                              LocalDateTime dateEnd) {
         return ResponseEntity.ok(service.getStatistics(id, dateStart, dateEnd));
     }
 }

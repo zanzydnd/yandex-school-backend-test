@@ -246,7 +246,17 @@ public class ShopUnitService implements ShopUnitServiceInterface {
 
     // не смог придумать запрос
     @Override
-    public ReturnSalesDto getStatistics(UUID id, Date dateStart, Date dateEnd) {
-        return null;
+    public ReturnSalesDto getStatistics(UUID id, LocalDateTime dateStart, LocalDateTime dateEnd) {
+        // ReturnItemDto
+        var inHistoryModels = shopUnitHistoryRepository.findAllUnitsByDateAndIdBetween(dateStart, dateEnd, id);
+        var mainModel = shopUnitRepository.findAllUnitsByDateBetweenAndIdWithAvg(dateStart, dateEnd, id);
+        var result = new ArrayList<ReturnItemDto>();
+
+        result.add(modelMapper.map(mainModel, ReturnItemDto.class));
+        result.addAll(inHistoryModels.stream().map(
+                        mdl -> modelMapper.map(mdl, ReturnItemDto.class)
+                ).collect(Collectors.toList())
+        );
+        return ReturnSalesDto.builder().items(result).build();
     }
 }
