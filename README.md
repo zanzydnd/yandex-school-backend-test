@@ -1,6 +1,6 @@
 # Запуск приложения
 - Заполняем application.properties
-- ./mvnw clear package -D
+- ./mvnw clean package -DskipTests
 - docker-compose up --build -d
 
 Будет доступен по 80 порту
