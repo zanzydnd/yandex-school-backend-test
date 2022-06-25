@@ -53,12 +53,13 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         Map<UUID, ShopUnitModel> rootLevelMap = new HashMap<>();
         Map<UUID, ShopUnitModel> all = new HashMap<>();
         Map<UUID, List<ShopUnitModel>> childrenMap = new HashMap<>();
-
         //Складываем все по map - чтобы потом пользоваться ими, мапим результаты
         importShopUnitDto.getItems().forEach(item -> {
             var model = mapToShopUnitModel(item, importShopUnitDto.getUpdateDate());
             rootLevelMap.put(item.getId(), model);
             all.put(item.getId(), model);
+
+
         });
 
         /*
@@ -101,7 +102,13 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         });
         stack.push(orphans);
 
-        shopUnitRepository.migrateToHistory(new ArrayList<>(all.keySet()));
+        //здесь мы получаем id сущностей , которые тоже нужно обновить , потому что они родители
+
+        var allAndParentsConcat = Stream.concat(all.keySet().stream(), childrenMap.keySet().stream()).collect(Collectors.toSet());
+        var parentsUUIDS = shopUnitRepository.getAllParents(allAndParentsConcat.stream().toList());
+
+        var allToMigrate = Stream.concat(allAndParentsConcat.stream(), parentsUUIDS.stream()).collect(Collectors.toSet()).stream().toList();
+        shopUnitRepository.migrateToHistory(allToMigrate);
 
         while (!stack.empty()) {
             // мапим каждую отдельно , потому что hibernate испытывает трудности с этим  - не смог исправить
@@ -115,15 +122,13 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                     );
                 }
             }
-            shopUnitRepository.saveAll(shopUnitModels);
+            shopUnitRepository.saveAllAndFlush(shopUnitModels);
         }
 
         //здесь мы получаем id сущностей , которые тоже нужно обновить , потому что они родители
-        var parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(all.keySet()));
+        parentsUUIDS = shopUnitRepository.getAllParents(new ArrayList<>(all.keySet()));
 
-
-        shopUnitRepository.migrateToHistory(parentsUUIDS);
-
+        //shopUnitRepository.migrateToHistory(parentsUUIDS);
         shopUnitRepository.updateDateByIds(parentsUUIDS, importShopUnitDto.getUpdateDate());
 
         return true;
@@ -164,7 +169,6 @@ public class ShopUnitService implements ShopUnitServiceInterface {
             throw new NotFoundException("Not found");
         }
         list.forEach(dto -> {
-            System.out.println(dto.getLevel());
             if (dto.getLevel().equals(0)) {
                 result.setId(UUID.fromString(dto.getId()));
                 result.setDate(dto.getDate().toInstant()
@@ -214,8 +218,6 @@ public class ShopUnitService implements ShopUnitServiceInterface {
                     var parent = map.get(UUID.fromString(dto.getParent_id()));
                     parent.getChildren().add(current_dto);
                 }
-                System.out.println(current_dto.getName());
-                System.out.println(current_dto.getDate());
             }
         });
         return result;
@@ -227,20 +229,31 @@ public class ShopUnitService implements ShopUnitServiceInterface {
     public ReturnSalesDto getSales(LocalDateTime date) {
         var salesUnitsModel = shopUnitRepository.findAllUnitsByDateBetween(date.minusHours(24), date);
         List<UUID> notIds = new ArrayList<>();
+
         var salesUnitsDto = salesUnitsModel.stream().map(obj -> {
+
             notIds.add(obj.getId());
-            return modelMapper.map(obj, ReturnItemDto.class);
-        });
+
+            var toReturn = modelMapper.map(obj, ReturnItemDto.class);
+
+            if (obj.getParent() != null) {
+                toReturn.setParentId(obj.getParent().getId());
+            } else {
+                toReturn.setParentId(null);
+            }
+
+
+            return toReturn;
+        }).toList();
+
+
         var salesHistoryUnitsModel = shopUnitHistoryRepository.findAllUnitsHistoryByDateBetween(date.minusHours(24), date, notIds);
         var salesHistoryUnitsDto = salesHistoryUnitsModel.stream().map(
-                obj -> {
-                    System.out.println(obj);
-                    return modelMapper.map(obj, ReturnItemDto.class);
-                }
-        );
+                obj -> modelMapper.map(obj, ReturnItemDto.class)
+        ).toList();
         ReturnSalesDto returnSalesDto = new ReturnSalesDto();
 
-        returnSalesDto.setItems(Stream.concat(salesUnitsDto, salesHistoryUnitsDto).collect(Collectors.toList()));
+        returnSalesDto.setItems(Stream.concat(salesUnitsDto.stream(), salesHistoryUnitsDto.stream()).collect(Collectors.toList()));
         return returnSalesDto;
     }
 
@@ -252,11 +265,18 @@ public class ShopUnitService implements ShopUnitServiceInterface {
         var mainModel = shopUnitRepository.findAllUnitsByDateBetweenAndIdWithAvg(dateStart, dateEnd, id);
         var result = new ArrayList<ReturnItemDto>();
 
-        result.add(modelMapper.map(mainModel, ReturnItemDto.class));
-        result.addAll(inHistoryModels.stream().map(
-                        mdl -> modelMapper.map(mdl, ReturnItemDto.class)
-                ).collect(Collectors.toList())
-        );
+        if (inHistoryModels.size() == 0 && mainModel == null) {
+            throw new NotFoundException("not found");
+        }
+        if (mainModel != null) {
+            result.add(modelMapper.map(mainModel, ReturnItemDto.class));
+        }
+        if (inHistoryModels.size() > 0) {
+            result.addAll(inHistoryModels.stream().map(
+                            mdl -> modelMapper.map(mdl, ReturnItemDto.class)
+                    ).collect(Collectors.toList())
+            );
+        }
         return ReturnSalesDto.builder().items(result).build();
     }
 }

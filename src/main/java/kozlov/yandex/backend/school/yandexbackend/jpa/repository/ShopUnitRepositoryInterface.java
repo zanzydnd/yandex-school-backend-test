@@ -33,56 +33,54 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
     @Transactional
     @Modifying
     @Query(
-            value = "insert into shop_unit_history (date, name, price, type, origin_id, parent_id)\n" +
-                    "\n" +
-                    "\n" +
-                    "    (select sp.date,\n" +
-                    "            sp.name,\n" +
-                    "            (\n" +
-                    "                (\n" +
-                    "                    WITH RECURSIVE unit_tree as (\n" +
-                    "                        SELECT s1.id,\n" +
-                    "                               s1.name,\n" +
-                    "                               s1.price,\n" +
-                    "                               s1.parent_id,\n" +
-                    "                               s1.type,\n" +
-                    "                               s1.date,\n" +
-                    "                               0                       as level,\n" +
-                    "                               array [s1.id] as path\n" +
-                    "                        FROM shop_unit s1\n" +
-                    "                        WHERE s1.id = sp.id\n" +
-                    "\n" +
-                    "                        UNION ALL\n" +
-                    "\n" +
-                    "                        SELECT s2.id,\n" +
-                    "                               s2.name,\n" +
-                    "                               s2.price,\n" +
-                    "                               s2.parent_id,\n" +
-                    "                               s2.type,\n" +
-                    "                               s2.date,\n" +
-                    "                               level + 1,\n" +
-                    "                               ut.path || s2.id as path --generate the path for every unit so that we can check if it is a child of another element\n" +
-                    "                        FROM shop_unit s2\n" +
-                    "                                 JOIN unit_tree ut ON ut.id = s2.parent_id\n" +
-                    "                    )\n" +
-                    "                    SELECT case when ut.type = 'CATEGORY' then ap.avg_price else ut.price end as price\n" +
-                    "                    FROM unit_tree ut\n" +
-                    "                             LEFT JOIN LATERAL (\n" +
-                    "                        SELECT avg(ut2.price) avg_price\n" +
-                    "                        FROM unit_tree ut2\n" +
-                    "                        WHERE ut.level < ut2.level\n" +
-                    "                          and ut.id = any (path)\n" +
-                    "                        GROUP BY ut.id\n" +
-                    "                        ) ap ON TRUE\n" +
-                    "                    where ut.level = 0\n" +
-                    "                )\n" +
-                    "            ) as price,\n" +
-                    "            sp.type,\n" +
-                    "            sp.id,\n" +
-                    "            sp.parent_id\n" +
-                    "     from shop_unit sp\n" +
-                    "     where id in :ids" +
-                    "    );",
+            value = """
+                    insert into shop_unit_history (date, name, price, type, origin_id, parent_id)
+                        (select sp.date,
+                                sp.name,
+                                (
+                                    (
+                                        WITH RECURSIVE unit_tree as (
+                                            SELECT s1.id,
+                                                   s1.name,
+                                                   s1.price,
+                                                   s1.parent_id,
+                                                   s1.type,
+                                                   s1.date,
+                                                   0                       as level,
+                                                   array [s1.id] as path
+                                            FROM shop_unit s1
+                                            WHERE s1.id = sp.id
+
+                                            UNION ALL
+
+                                            SELECT s2.id,
+                                                   s2.name,
+                                                   s2.price,
+                                                   s2.parent_id,
+                                                   s2.type,
+                                                   s2.date,
+                                                   level + 1,
+                                                   ut.path || s2.id as path --generate the path for every unit so that we can check if it is a child of another element
+                                            FROM shop_unit s2
+                                                     JOIN unit_tree ut ON ut.id = s2.parent_id
+                                        )
+                                        SELECT case when ut.type = 'CATEGORY' then ap.avg_price else ut.price end as price
+                                        FROM unit_tree ut
+                                                 LEFT JOIN LATERAL (
+                                            SELECT avg(ut2.price) avg_price
+                                            FROM unit_tree ut2
+                                            WHERE ut.level < ut2.level
+                                              and ut.id = any (path)
+                                            GROUP BY ut.id
+                                            ) ap ON TRUE
+                                        where ut.level = 0
+                                    )
+                                ) as price,
+                                sp.type,
+                                sp.id,
+                                sp.parent_id
+                         from shop_unit sp
+                         where id in :ids    );""",
             nativeQuery = true
     )
     int migrateToHistory(@Param("ids") List<UUID> ids);
@@ -92,78 +90,81 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
     @Query(value = "update shop_unit set date=:updateDate where id in :ids", nativeQuery = true)
     int updateDateByIds(@Param("ids") List<UUID> ids, @Param("updateDate") LocalDateTime updateDate);
 
-    @Query(value = "WITH RECURSIVE unit_tree as (\n" +
-            "    SELECT s1.id,\n" +
-            "           s1.name,\n" +
-            "           s1.price,\n" +
-            "           s1.parent_id,\n" +
-            "           s1.type,\n" +
-            "           s1.date,\n" +
-            "           0 as level,\n" +
-            "           array [s1.id] as path\n" +
-            "    FROM shop_unit s1\n" +
-            "    WHERE s1.id = :headId\n" +
-            "\n" +
-            "    UNION ALL\n" +
-            "\n" +
-            "    SELECT s2.id,\n" +
-            "           s2.name,\n" +
-            "           s2.price,\n" +
-            "           s2.parent_id,\n" +
-            "           s2.type,\n" +
-            "           s2.date,\n" +
-            "           level + 1,\n" +
-            "           ut.path || s2.id as path --generate the path for every unit so that we can check if it is a child of another element\n" +
-            "    FROM shop_unit s2\n" +
-            "             JOIN unit_tree ut ON ut.id = s2.parent_id\n" +
-            ")\n" +
-            "\n" +
-            "SELECT cast(ut.id as varchar) as id ,\n" +
-            "       ut.name as name,\n" +
-            "       cast(ut.parent_id as varchar ) as parent_id,\n" +
-            "       ut.type as type ,\n" +
-            "       case when ut.type = 'CATEGORY' then ap.avg_price else ut.price end as price,\n" +
-            "       ut.level as level,\n" +
-            "       ut.date ,\n" +
-            "       ut.path \n" +
-            "\n" +
-            "FROM unit_tree ut\n" +
-            "         -- The JOIN LATERAL subquery roughly means \"for each row of ut run this query\"\n" +
-            "         -- Must be a LEFT JOIN LATERAL in order to keep rows of ut that have no children.\n" +
-            "         LEFT JOIN LATERAL (\n" +
-            "    SELECT avg(ut2.price) avg_price\n" +
-            "    FROM unit_tree ut2\n" +
-            "    WHERE ut.level < ut2.level \n" +
-            "      and ut.id = any (path) \n" +
-            "    GROUP BY ut.id\n" +
-            "    ) ap ON TRUE\n" +
-            "\n" +
-            "ORDER BY level;", nativeQuery = true)
+    @Query(value = """
+            WITH RECURSIVE unit_tree as (
+                SELECT s1.id,
+                       s1.name,
+                       s1.price,
+                       s1.parent_id,
+                       s1.type,
+                       s1.date,
+                       0 as level,
+                       array [s1.id] as path
+                FROM shop_unit s1
+                WHERE s1.id = :headId
+
+                UNION ALL
+
+                SELECT s2.id,
+                       s2.name,
+                       s2.price,
+                       s2.parent_id,
+                       s2.type,
+                       s2.date,
+                       level + 1,
+                       ut.path || s2.id as path --generate the path for every unit so that we can check if it is a child of another element
+                FROM shop_unit s2
+                         JOIN unit_tree ut ON ut.id = s2.parent_id
+            )
+
+            SELECT cast(ut.id as varchar) as id ,
+                   ut.name as name,
+                   cast(ut.parent_id as varchar ) as parent_id,
+                   ut.type as type ,
+                   case when ut.type = 'CATEGORY' then ap.avg_price else ut.price end as price,
+                   ut.level as level,
+                   ut.date ,
+                   ut.path
+
+            FROM unit_tree ut
+                     -- The JOIN LATERAL subquery roughly means "for each row of ut run this query"
+                     -- Must be a LEFT JOIN LATERAL in order to keep rows of ut that have no children.
+                     LEFT JOIN LATERAL (
+                SELECT avg(ut2.price) avg_price
+                FROM unit_tree ut2
+                WHERE ut.level < ut2.level
+                  and ut.id = any (path)
+                GROUP BY ut.id
+                ) ap ON TRUE
+
+            ORDER BY level;""", nativeQuery = true)
     List<Map<String, Object>> getAllWithChildrenAndAveragePrice(@Param("headId") UUID id);
 
     @Query(
             nativeQuery = true,
-            value = "with RECURSIVE name_tree as\n" +
-                    "                   (\n" +
-                    "                       SELECT id, parent_id\n" +
-                    "                       FROM shop_unit\n" +
-                    "                       WHERE id IN (\n" +
-                    "                           SELECT parent_id\n" +
-                    "                           FROM shop_unit\n" +
-                    "                           WHERE id in :ids)\n" +
-                    "\n" +
-                    "                       union all\n" +
-                    "\n" +
-                    "                       select c.id, c.parent_id\n" +
-                    "                       from shop_unit c\n" +
-                    "                                join name_tree p on C.id = P.parent_id\n" +
-                    "                   )\n" +
-                    "select distinct(cast(id as varchar)) \n" +
-                    "from name_tree where id not in :ids ;"
+            value = """
+                    with RECURSIVE name_tree as
+                                       (
+                                           SELECT id, parent_id
+                                           FROM shop_unit
+                                           WHERE id IN (
+                                               SELECT parent_id
+                                               FROM shop_unit
+                                               WHERE id in :ids)
+
+                                           union all
+
+                                           select c.id, c.parent_id
+                                           from shop_unit c
+                                                    join name_tree p on C.id = P.parent_id
+                                       )
+                    select distinct(cast(id as varchar))
+                    from name_tree where id not in :ids ;"""
     )
     List<UUID> getAllParents(@Param("ids") List<UUID> ids);
 
     @Query(value = "select * from shop_unit as shp where shp.date <= :before and shp.date>= :after and shp.type = 'OFFER'", nativeQuery = true)
+    @Transactional
     List<ShopUnitModel> findAllUnitsByDateBetween(@Param("after") LocalDateTime after, @Param("before") LocalDateTime before);
 
     @Query(
@@ -211,6 +212,7 @@ public interface ShopUnitRepositoryInterface extends JpaSpecificationExecutor<Sh
                     where ut.level = 0 and ut.date >= :after and ut.date < :before ;""",
             nativeQuery = true
     )
+    @Transactional
     ShopUnitModel findAllUnitsByDateBetweenAndIdWithAvg(@Param("after") LocalDateTime after, @Param("before") LocalDateTime before, @Param("id") UUID id);
 
 }

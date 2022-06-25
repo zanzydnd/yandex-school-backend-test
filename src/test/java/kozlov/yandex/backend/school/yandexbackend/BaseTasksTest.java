@@ -1,32 +1,24 @@
 package kozlov.yandex.backend.school.yandexbackend;
 
-import kozlov.yandex.backend.school.yandexbackend.controller.BaseTaskController;
 import kozlov.yandex.backend.school.yandexbackend.dto.ImportShopUnitDto;
 import kozlov.yandex.backend.school.yandexbackend.dto.ResponseNodeShopUnitDto;
 import kozlov.yandex.backend.school.yandexbackend.dto.ShopUnitDto;
 import kozlov.yandex.backend.school.yandexbackend.enums.ShopUnitType;
+import kozlov.yandex.backend.school.yandexbackend.jpa.repository.ShopUnitHistoryRepositoryInterface;
 import kozlov.yandex.backend.school.yandexbackend.jpa.repository.ShopUnitRepositoryInterface;
+import kozlov.yandex.backend.school.yandexbackend.model.ShopUnitHistoryModel;
 import kozlov.yandex.backend.school.yandexbackend.model.ShopUnitModel;
-import org.checkerframework.checker.units.qual.A;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.runner.RunWith;
 import org.junit.runners.MethodSorters;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpStatus;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.junit.Assert;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.shaded.com.fasterxml.jackson.databind.jsonFormatVisitors.JsonIntegerFormatVisitor;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -42,8 +34,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class BaseTasksTest extends AbstractTest {
 
-
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -51,6 +41,8 @@ public class BaseTasksTest extends AbstractTest {
     @Autowired
     private ShopUnitRepositoryInterface shopUnitRepository;
 
+    @Autowired
+    private ShopUnitHistoryRepositoryInterface shopUnitHistoryRepository;
 
     @Test
     public void AimportValidData() throws Exception {
@@ -232,6 +224,53 @@ public class BaseTasksTest extends AbstractTest {
                                 .content(super.mapToJson(importShopUnitDto)))
                 .andExpect(status().isOk());
 
+        //check is migrated to history right
+        ShopUnitHistoryModel headHistory = shopUnitHistoryRepository.findAllByOriginId(
+                UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a111")
+        ).get(0);
+
+        Assert.assertEquals(headHistory.getOriginId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a111"));
+        Assert.assertEquals(headHistory.getPrice(), Long.valueOf(433));
+        Assert.assertEquals(headHistory.getDate(), updateDate);
+        Assert.assertEquals(headHistory.getType(), ShopUnitType.CATEGORY);
+        Assert.assertEquals(headHistory.getName(), "Head");
+        Assert.assertNull(headHistory.getParentId());
+
+        ShopUnitHistoryModel nodeHistory = shopUnitHistoryRepository.findAllByOriginId(
+                UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a222")
+        ).get(0);
+
+        Assert.assertEquals(nodeHistory.getOriginId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a222"));
+        Assert.assertEquals(nodeHistory.getPrice(), Long.valueOf(150));
+        Assert.assertEquals(nodeHistory.getDate(), updateDate);
+        Assert.assertEquals(nodeHistory.getType(), ShopUnitType.CATEGORY);
+        Assert.assertEquals(nodeHistory.getName(), "Node");
+        Assert.assertEquals(nodeHistory.getParentId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a111"));
+
+        ShopUnitHistoryModel node2History = shopUnitHistoryRepository.findAllByOriginId(
+                UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a333")
+        ).get(0);
+
+        Assert.assertEquals(node2History.getOriginId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a333"));
+        Assert.assertEquals(node2History.getPrice(), Long.valueOf(200));
+        Assert.assertEquals(node2History.getDate(), updateDate);
+        Assert.assertEquals(node2History.getType(), ShopUnitType.CATEGORY);
+        Assert.assertEquals(node2History.getName(), "Node2");
+        Assert.assertEquals(node2History.getParentId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a222"));
+
+        ShopUnitHistoryModel leaf2History = shopUnitHistoryRepository.findAllByOriginId(
+                UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a555")
+        ).get(0);
+
+        Assert.assertEquals(leaf2History.getOriginId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a555"));
+        Assert.assertEquals(leaf2History.getPrice(), Long.valueOf(200));
+        Assert.assertEquals(leaf2History.getDate(), updateDate);
+        Assert.assertEquals(leaf2History.getType(), ShopUnitType.OFFER);
+        Assert.assertEquals(leaf2History.getName(), "leaf2");
+        Assert.assertEquals(leaf2History.getParentId(), UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a333"));
+
+
+        // check updates
         ShopUnitModel leaf2UpdateModel = shopUnitRepository.findById(
                 UUID.fromString("3fa85f64-5717-4562-b3fc-2c963f66a555")).orElseThrow();
         ShopUnitModel node2UpdateModel = shopUnitRepository.findById(
@@ -288,11 +327,7 @@ public class BaseTasksTest extends AbstractTest {
     @Test
     @Order(4)
     public void DgetElement() throws Exception {
-        // цена категории - это средняя цена всех её товаров,
-        // включая товары дочерних категорий.
-        // Если категория не содержит товаров цена равна null.
-        // При обновлении цены товара, средняя цена категории,
-        // которая содержит этот товар, тоже обновляется.
+        //отсортировать ....
 
         LocalDateTime dateUpdated = Instant.parse("2020-12-01T10:05:23.653Z").atZone(ZoneId.of("UTC"))
                 .toLocalDateTime();
@@ -363,13 +398,17 @@ public class BaseTasksTest extends AbstractTest {
                 .contentType("application/json")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         var result = mapFromJson(response, ResponseNodeShopUnitDto.class);
 
+        sort(father);
+        sort(result);
         Assert.assertEquals(father, result);
 
         response = this.mockMvc.perform(get("/nodes/" + "3fa85f64-5717-4562-b3fc-2c963f66a222")
                 .contentType("application/json")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         result = mapFromJson(response, ResponseNodeShopUnitDto.class);
 
+        sort(node);
 
+        sort(result);
         Assert.assertEquals(node, result);
 
         // проверка на пустой массив у категории без детей
@@ -533,28 +572,48 @@ public class BaseTasksTest extends AbstractTest {
         ).andExpect(status().isNotFound()).andReturn();
     }
 
-//    @Test
-//    public void HdeleteTest() throws Exception {
-//        this.mockMvc.perform(
-//                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a222")
-//                        .contentType("application/json")
-//        ).andExpect(status().isOk()).andReturn();
-//
-//        this.mockMvc.perform(
-//                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a444")
-//                        .contentType("application/json")
-//        ).andExpect(status().isNotFound()).andReturn();
-//
-//        this.mockMvc.perform(
-//                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a333")
-//                        .contentType("application/json")
-//        ).andExpect(status().isNotFound()).andReturn();
-//
-//        this.mockMvc.perform(
-//                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a222")
-//                        .contentType("application/json")
-//        ).andExpect(status().isNotFound()).andReturn();
-//
-//
-//    }
+    @Test
+    public void HdeleteTest() throws Exception {
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a222")
+                        .contentType("application/json")
+        ).andExpect(status().isOk()).andReturn();
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a444")
+                        .contentType("application/json")
+        ).andExpect(status().isNotFound()).andReturn();
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a333")
+                        .contentType("application/json")
+        ).andExpect(status().isNotFound()).andReturn();
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a222")
+                        .contentType("application/json")
+        ).andExpect(status().isNotFound()).andReturn();
+
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a111")
+                        .contentType("application/json")
+        ).andExpect(status().isOk()).andReturn();
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a111")
+                        .contentType("application/json")
+        ).andExpect(status().isNotFound()).andReturn();
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a123")
+                        .contentType("application/json")
+        ).andExpect(status().isOk());
+
+        this.mockMvc.perform(
+                delete("/delete/3fa85f64-5717-4562-b3fc-2c963f66a123")
+                        .contentType("application/json")
+        ).andExpect(status().isNotFound());
+
+    }
 }
